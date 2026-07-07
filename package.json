@@ -1,0 +1,12 @@
+{
+  "name": "bulk-dr-checker-vercel-fixed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bulk DR Checker for Vercel with root index.html and serverless API.",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

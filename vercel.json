@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "functions": {
+    "api/check-dr.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/check-dr",
+      "destination": "/api/check-dr.js"
+    }
+  ]
+}

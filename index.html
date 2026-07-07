@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk DR Checker</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="app-container">
+
+  <header class="header">
+    <div class="header-badge"><i class="fas fa-bolt"></i> Free Bulk Tool</div>
+    <h1>Bulk <span>DR</span> Checker</h1>
+    <p>Check Domain Rating for multiple domains at once. Paste your list and hit start.</p>
+    <div class="attribution">Domain Rating by <a href="https://ahrefs.com/" target="_blank" rel="noopener">Ahrefs</a></div>
+  </header>
+
+  <section class="input-section">
+    <div class="input-label">
+      <div class="input-label-left">
+        <i class="fas fa-globe"></i>
+        <span>Domain List</span>
+      </div>
+      <span class="domain-count" id="domainCount">0 domains</span>
+    </div>
+    <textarea
+      id="domainInput"
+      placeholder="example.com&#10;another-site.org&#10;my-blog.net&#10;&#10;One domain per line — protocol and www are optional"
+      spellcheck="false"
+      aria-label="Enter domains to check"
+    ></textarea>
+  </section>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="btnStart" aria-label="Start checking domains">
+      <i class="fas fa-play"></i> Start Checking
+    </button>
+    <button class="btn btn-secondary" id="btnStop" style="display:none" aria-label="Stop checking">
+      <i class="fas fa-stop"></i> Stop
+    </button>
+    <button class="btn btn-secondary" id="btnClear" aria-label="Clear all">
+      <i class="fas fa-eraser"></i> Clear
+    </button>
+    <button class="btn btn-ghost" id="btnSample" aria-label="Load sample domains">
+      <i class="fas fa-flask"></i> Load Sample
+    </button>
+    <div class="controls-spacer"></div>
+    <div class="delay-select">
+      <label for="delayMs">Delay</label>
+      <select id="delayMs">
+        <option value="800">800ms</option>
+        <option value="1200" selected>1200ms</option>
+        <option value="2000">2000ms</option>
+        <option value="3000">3000ms</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="progress-section" id="progressSection">
+    <div class="progress-header">
+      <span class="progress-text" id="progressText">Checking <strong>0 / 0</strong></span>
+      <span class="progress-percent" id="progressPercent">0%</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-label">Total</div>
+      <div class="stat-value" id="statTotal">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Success</div>
+      <div class="stat-value accent" id="statSuccess">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Failed</div>
+      <div class="stat-value err" id="statFailed">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg DR</div>
+      <div class="stat-value" id="statAvg">&mdash;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Highest</div>
+      <div class="stat-value accent" id="statMax">&mdash;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">DR 50+</div>
+      <div class="stat-value warn" id="statHigh">0</div>
+    </div>
+  </div>
+
+  <section class="results-section" id="resultsSection">
+    <div class="results-header">
+      <span class="results-title">Results</span>
+      <div class="results-right">
+        <div class="filter-bar" id="filterBar">
+          <button class="filter-chip active" data-filter="all">All</button>
+          <button class="filter-chip" data-filter="high">DR 50+</button>
+          <button class="filter-chip" data-filter="med">DR 20-49</button>
+          <button class="filter-chip" data-filter="low">DR 0-19</button>
+          <button class="filter-chip" data-filter="error">Errors</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btnExport" aria-label="Export CSV">
+          <i class="fas fa-download"></i> CSV
+        </button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Domain</th>
+            <th>DR</th>
+            <th>Bar</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="empty-state" id="emptyState">
+    <i class="fas fa-search"></i>
+    <p>Your results will appear here.<br>Paste some domains above and click Start Checking.</p>
+  </div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
