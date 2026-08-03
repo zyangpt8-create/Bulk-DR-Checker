@@ -1,4 +1,5 @@
 const AHREFS_ENDPOINT = 'https://api.ahrefs.com/v3/public/domain-rating-free';
+const AHREFS_API_KEY = process.env.AHREFS_API_KEY;
 
 function normalizeDomain(raw) {
   if (!raw || typeof raw !== 'string') return '';
@@ -47,6 +48,7 @@ async function fetchWithTimeout(url, timeoutMs = 20000) {
       method: 'GET',
       headers: {
         Accept: 'application/json',
+        Authorization: `Bearer ${AHREFS_API_KEY}`,
         'User-Agent': 'BulkDRCheckerVercel/1.0'
       },
       signal: controller.signal
@@ -89,6 +91,14 @@ module.exports = async function handler(req, res) {
       success: false,
       domain,
       error: 'Invalid domain format.'
+    });
+  }
+
+  if (!AHREFS_API_KEY) {
+    return sendJson(res, 500, {
+      success: false,
+      domain,
+      error: 'AHREFS_API_KEY is not configured on the server.'
     });
   }
 
