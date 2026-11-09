@@ -38,3 +38,11 @@ Value: your_new_ahrefs_api_key
 Select Production (and Preview if needed), save, then redeploy. Environment variable changes only apply to new deployments.
 
 The frontend calls `/api/check-dr?target=example.com`; the serverless function adds the Ahrefs `Authorization: Bearer ...` header.
+
+## Speed modes
+
+- Balanced (default): checks 3 domains concurrently with a 150ms launch gap.
+- Fast: checks up to 5 domains concurrently, with no artificial delay.
+- Safe: checks 1 domain at a time with a 1200ms gap.
+
+Each domain makes two Ahrefs requests in parallel (DR3 and DR4). Fast mode can generate up to 10 simultaneous upstream Ahrefs requests and may hit provider rate limits. HTTP 429 and temporary server failures are retried with backoff (up to 2 retries); permanent auth errors are not retried. Choose Safe if you see 429 errors. Actual speed depends on Ahrefs quotas and network latency.

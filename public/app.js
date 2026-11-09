@@ -16,7 +16,7 @@
   const btnClear      = document.getElementById('btnClear');
   const btnSample     = document.getElementById('btnSample');
   const btnExport     = document.getElementById('btnExport');
-  const delayMs       = document.getElementById('delayMs');
+  const speedMode     = document.getElementById('speedMode');
   const progressSection = document.getElementById('progressSection');
   const progressText  = document.getElementById('progressText');
   const progressPercent = document.getElementById('progressPercent');
@@ -117,7 +117,8 @@
   function updateStats() {
     var successes = results.filter(function(r) { return r.status === 'ok'; });
     var failed = results.filter(function(r) { return r.status !== 'ok' && r.status !== 'checking'; });
-    var drs = successes.map(function(r) { return r.dr; });
+    var drs = successes.map(function(r) { return r.dr3; }).filter(function(d) { return typeof d === 'number'; });
+    var dr4s = successes.map(function(r) { return r.dr4; }).filter(function(d) { return typeof d === 'number'; });
     var avg = drs.length > 0 ? (drs.reduce(function(a, b) { return a + b; }, 0) / drs.length).toFixed(1) : '\u2014';
     var max = drs.length > 0 ? Math.max.apply(null, drs) : '\u2014';
     var high = drs.filter(function(d) { return d >= 50; }).length;
@@ -128,21 +129,22 @@
     document.getElementById('statAvg').textContent = avg;
     document.getElementById('statMax').textContent = max;
     document.getElementById('statHigh').textContent = high;
+    document.getElementById('statAvg4').textContent = dr4s.length ? (dr4s.reduce(function(a,b){return a+b;},0)/dr4s.length).toFixed(1) : '\u2014';
   }
 
   function renderResults() {
     var filtered = results.filter(function(r) {
       if (currentFilter === 'all') return true;
-      if (currentFilter === 'high') return r.status === 'ok' && r.dr >= 50;
-      if (currentFilter === 'med') return r.status === 'ok' && r.dr >= 20 && r.dr < 50;
-      if (currentFilter === 'low') return r.status === 'ok' && r.dr < 20;
+      if (currentFilter === 'high') return r.status === 'ok' && r.dr3 >= 50;
+      if (currentFilter === 'med') return r.status === 'ok' && r.dr3 >= 20 && r.dr3 < 50;
+      if (currentFilter === 'low') return r.status === 'ok' && r.dr3 < 20;
       if (currentFilter === 'error') return r.status === 'error';
       return true;
     });
 
     if (filtered.length === 0) {
       resultsBody.innerHTML =
-        '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--fg-dim);">' +
+        '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--fg-dim);">' +
         'No results match this filter.</td></tr>';
       return;
     }
@@ -153,10 +155,10 @@
       var drBadge, drBar, statusHtml;
 
       if (r.status === 'ok') {
-        drBadge = '<span class="dr-badge ' + drClass(r.dr) + '">' + r.dr + '</span>';
+        drBadge = '<span class="dr-badge ' + drClass(r.dr3) + '">' + r.dr3 + '</span>';
         drBar = '<div class="dr-bar-track"><div class="dr-bar-fill" style="width:' +
-                r.dr + '%;background:' + drBarColor(r.dr) + ';"></div></div>';
-        statusHtml = '<span class="status-ok">OK</span>';
+                (r.dr3 || 0) + '%;background:' + drBarColor(r.dr3 || 0) + ';"></div></div>';
+        statusHtml = r.error ? '<span class="status-err" title="' + escapeHtml(r.error) + '">Partial</span>' : '<span class="status-ok">OK</span>';
       } else if (r.status === 'checking') {
         drBadge = '<span style="color:var(--fg-dim);font-size:12px;">\u2014</span>';
         drBar = '<div class="dr-bar-track"><div class="dr-bar-fill" style="width:0%;"></div></div>';
@@ -170,8 +172,10 @@
       html +=
         '<tr class="row-enter" style="animation-delay:' + Math.min(i * 20, 300) + 'ms">' +
         '<td class="td-num">' + (i + 1) + '</td>' +
-        '<td class="td-domain">' + escapeHtml(r.domain) + '</td>' +
+        '<td class="td-domain"><span class="domain-with-icon"><img class="domain-favicon" src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(r.domain) + '&sz=32" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display=\'none\'">' + escapeHtml(r.domain) + '</span></td>' +
         '<td class="td-dr">' + drBadge + '</td>' +
+        '<td class="td-dr">' + (typeof r.dr4 === 'number' ? '<span class="dr-badge ' + drClass(r.dr4) + '">' + r.dr4 + '</span>' : '\u2014') + '</td>' +
+        '<td class="td-dr">' + (typeof r.dr3 === 'number' && typeof r.dr4 === 'number' ? (r.dr4-r.dr3 > 0 ? '+' : '') + (Math.round((r.dr4-r.dr3)*10)/10) : '\u2014') + '</td>' +
         '<td class="dr-bar-cell">' + drBar + '</td>' +
         '<td class="td-status">' + statusHtml + '</td>' +
         '</tr>';
@@ -217,36 +221,38 @@
     }
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Unknown error from backend');
+      var apiError = new Error(data.error || 'Unknown error from backend');
+      apiError.status = response.status;
+      apiError.retryAfterMs = Number(data.retryAfterMs) || 0;
+      throw apiError;
     }
-    return data.dr;
+    return data;
   }
 
-  /* Check a single domain with up to 2 retries */
+  /* Retry only temporary errors. Avoid wasting time on invalid API keys and other permanent failures. */
   async function checkSingleDomain(domain) {
     var maxRetries = 2;
-    var lastError = '';
-
     for (var attempt = 0; attempt <= maxRetries; attempt++) {
+      if (shouldStop) return { dr3: null, dr4: null, error: 'Stopped' };
       try {
-        var dr = await fetchDR(domain);
-        return { dr: dr, error: null };
+        var data = await fetchDR(domain);
+        return { dr3: data.dr3, dr4: data.dr4, errors: data.errors, error: null };
       } catch (err) {
-        lastError = err.message || 'Unknown error';
-        if (attempt < maxRetries) {
-          /* Wait 2 seconds before retrying */
-          await sleep(2000);
+        var message = err.message || 'Unknown error';
+        var temporary = !err.status || err.status === 429 || err.status >= 500;
+        if (!temporary || attempt === maxRetries) {
+          return { dr3: null, dr4: null, error: message };
         }
+        var waitMs = Math.max(err.retryAfterMs || 0, (attempt + 1) * 2000);
+        await sleep(Math.min(waitMs, 15000));
       }
     }
-
-    return { dr: 0, error: lastError };
   }
 
-  /* ========================================
-     Main checking logic
-  ======================================== */
+  /* Each server request fetches DR3 and DR4 concurrently. Here we check several domains
+     concurrently too, keeping request volume bounded to respect Ahrefs rate limits. */
   async function startChecking() {
+    if (isRunning) return;
     var domains = parseDomains();
     if (domains.length === 0) {
       showToast('Please enter at least one domain.', 'warn');
@@ -255,86 +261,96 @@
 
     isRunning = true;
     shouldStop = false;
-    results = [];
     currentFilter = 'all';
-
-    /* Reset filter chips */
     var chips = filterBar.querySelectorAll('.filter-chip');
     for (var c = 0; c < chips.length; c++) chips[c].classList.remove('active');
     filterBar.querySelector('[data-filter="all"]').classList.add('active');
 
-    /* UI state */
     btnStart.style.display = 'none';
     btnStop.style.display = 'inline-flex';
     btnClear.disabled = true;
     btnSample.disabled = true;
     domainInput.disabled = true;
+    speedMode.disabled = true;
     progressSection.classList.add('active');
     statsGrid.classList.add('active');
     resultsSection.classList.add('active');
     emptyState.style.display = 'none';
+
+    results = domains.map(function(domain) {
+      return { domain: domain, dr3: null, dr4: null, status: 'checking', error: '' };
+    });
     updateProgress(0, domains.length);
+    updateStats();
+    renderResults();
 
-    var delay = parseInt(delayMs.value, 10);
+    var settings = {
+      fast: { workers: 5, launchGap: 0 },
+      balanced: { workers: 3, launchGap: 150 },
+      safe: { workers: 1, launchGap: 1200 }
+    }[speedMode.value] || { workers: 3, launchGap: 150 };
 
-    for (var i = 0; i < domains.length; i++) {
-      if (shouldStop) break;
+    var nextIndex = 0;
+    var completed = 0;
+    var lastLaunch = 0;
+    var launchGate = Promise.resolve();
 
-      var domain = domains[i];
+    // Serialize brief launch spacing, not the full API work.
+    function reserveNext() {
+      var take;
+      launchGate = launchGate.then(async function() {
+        if (shouldStop || nextIndex >= domains.length) return;
+        var gap = Math.max(0, lastLaunch + settings.launchGap - Date.now());
+        if (gap) await sleep(gap);
+        if (shouldStop) return;
+        take = nextIndex++;
+        lastLaunch = Date.now();
+      });
+      return launchGate.then(function() { return take; });
+    }
 
-      /* Add checking placeholder */
-      results.push({ domain: domain, dr: 0, status: 'checking', error: '' });
-      updateProgress(i + 1, domains.length);
-      updateStats();
-      renderResults();
-
-      /* Check with retries */
-      var result = await checkSingleDomain(domain);
-
-      /* Find the entry and update it */
-      var entry = null;
-      for (var j = results.length - 1; j >= 0; j--) {
-        if (results[j].domain === domain && results[j].status === 'checking') {
-          entry = results[j];
-          break;
-        }
-      }
-      if (entry) {
-        entry.dr = result.dr;
-        if (result.error) {
-          entry.status = 'error';
-          entry.error = result.error;
-        } else {
-          entry.status = 'ok';
-          entry.error = '';
-        }
-      }
-
-      updateStats();
-      renderResults();
-
-      /* Delay between domains (skip after last) */
-      if (i < domains.length - 1 && !shouldStop) {
-        await sleep(delay);
+    async function worker() {
+      while (!shouldStop) {
+        var index = await reserveNext();
+        if (index === undefined) break;
+        var result = await checkSingleDomain(domains[index]);
+        var entry = results[index];
+        entry.dr3 = result.dr3;
+        entry.dr4 = result.dr4;
+        entry.errors = result.errors;
+        entry.error = result.error || Object.entries(result.errors || {})
+          .filter(function(pair) { return pair[1]; })
+          .map(function(pair) { return pair[0].toUpperCase() + ': ' + pair[1]; })
+          .join('; ');
+        entry.status = result.error ? 'error' : 'ok';
+        completed++;
+        updateProgress(completed, domains.length);
+        updateStats();
+        renderResults();
       }
     }
 
-    /* Done */
-    isRunning = false;
-    btnStart.style.display = 'inline-flex';
-    btnStop.style.display = 'none';
-    btnClear.disabled = false;
-    btnSample.disabled = false;
-    domainInput.disabled = false;
-
-    var okCount = 0, errCount = 0;
-    for (var k = 0; k < results.length; k++) {
-      if (results[k].status === 'ok') okCount++;
-      else if (results[k].status === 'error') errCount++;
+    try {
+      await Promise.all(Array.from({ length: Math.min(settings.workers, domains.length) }, worker));
+    } finally {
+      // When stopped, remove unstarted placeholders to avoid fake 'Checking' rows.
+      if (shouldStop) results = results.filter(function(r) { return r.status !== 'checking'; });
+      isRunning = false;
+      btnStart.style.display = 'inline-flex';
+      btnStop.style.display = 'none';
+      btnClear.disabled = false;
+      btnSample.disabled = false;
+      domainInput.disabled = false;
+      speedMode.disabled = false;
+      updateStats();
+      renderResults();
+      updateProgress(results.length, results.length);
     }
 
+    var okCount = results.filter(function(r) { return r.status === 'ok'; }).length;
+    var errCount = results.filter(function(r) { return r.status === 'error'; }).length;
     if (shouldStop) {
-      showToast('Stopped early. ' + okCount + ' checked, ' + errCount + ' failed.', 'warn');
+      showToast('Stopped. ' + okCount + ' checked, ' + errCount + ' failed.', 'warn');
     } else if (errCount === 0) {
       showToast('All ' + okCount + ' domains checked successfully!', 'ok');
     } else {
@@ -349,7 +365,7 @@
 
   btnStop.addEventListener('click', function() {
     shouldStop = true;
-    showToast('Stopping after current request...', 'warn');
+    showToast('Stopping new checks. Active requests will finish.', 'warn');
   });
 
   btnClear.addEventListener('click', function() {
@@ -378,12 +394,14 @@
       showToast('No results to export.', 'warn');
       return;
     }
-    var csv = 'Domain,DR,Status\n';
+    var csv = 'Domain,DR3,DR4,Difference,Status\n';
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
-      var dr = r.status === 'ok' ? r.dr : '';
+      var dr3 = typeof r.dr3 === 'number' ? r.dr3 : '';
+      var dr4 = typeof r.dr4 === 'number' ? r.dr4 : '';
+      var diff = dr3 !== '' && dr4 !== '' ? Math.round((dr4-dr3)*10)/10 : '';
       var status = r.status === 'ok' ? 'OK' : r.error;
-      csv += '"' + r.domain + '",' + dr + ',"' + status.replace(/"/g, '""') + '"\n';
+      csv += '"' + r.domain + '",' + dr3 + ',' + dr4 + ',' + diff + ',"' + status.replace(/"/g, '""') + '"\n';
     }
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     var url = URL.createObjectURL(blob);

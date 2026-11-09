@@ -102,64 +102,42 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const apiUrl = `${AHREFS_ENDPOINT}?target=${encodeURIComponent(domain)}&output=json`;
-
-  try {
-    const ahrefsResponse = await fetchWithTimeout(apiUrl, 20000);
-    const rawText = await ahrefsResponse.text();
-
-    if (!ahrefsResponse.ok) {
-      let detail = rawText;
-      try {
-        const parsedError = JSON.parse(rawText);
-        detail = parsedError?.error || parsedError?.message || rawText;
-      } catch (_) {}
-
-      return sendJson(res, ahrefsResponse.status, {
-        success: false,
-        domain,
-        error: `Ahrefs API returned HTTP ${ahrefsResponse.status}${detail ? ': ' + String(detail).slice(0, 180) : ''}`
-      });
-    }
-
-    let data;
+  async function getVersion(version) {
+    const apiUrl = `${AHREFS_ENDPOINT}?target=${encodeURIComponent(domain)}&version=${version}&output=json`;
     try {
-      data = JSON.parse(rawText);
+      const response = await fetchWithTimeout(apiUrl, 20000);
+      const raw = await response.text();
+      if (!response.ok) {
+        let detail = raw;
+        try { const parsed = JSON.parse(raw); detail = parsed.error || parsed.message || raw; } catch (_) {}
+        const after = response.headers.get('retry-after');
+        const seconds = after ? Number(after) : NaN;
+        const retryAfterMs = Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : 0;
+        return { value: null, error: `HTTP ${response.status}: ${String(detail).slice(0, 150)}`, status: response.status, retryAfterMs };
+      }
+      const data = JSON.parse(raw);
+      const value = data?.domain_rating?.domain_rating;
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return { value: null, error: 'Missing or invalid Domain Rating' };
+      }
+      return { value, error: null };
     } catch (error) {
-      return sendJson(res, 502, {
-        success: false,
-        domain,
-        error: 'Ahrefs returned invalid JSON.'
-      });
+      return { value: null, error: error.name === 'AbortError' ? 'Request timed out' : (error.message || 'API error') };
     }
-
-    const dr = data?.domain_rating?.domain_rating;
-    if (typeof dr !== 'number' || Number.isNaN(dr)) {
-      return sendJson(res, 502, {
-        success: false,
-        domain,
-        error: 'Ahrefs response did not include a Domain Rating value.'
-      });
-    }
-
-    return sendJson(res, 200, {
-      success: true,
-      domain,
-      dr
-    });
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      return sendJson(res, 504, {
-        success: false,
-        domain,
-        error: 'Ahrefs request timed out after 20 seconds.'
-      });
-    }
-
-    return sendJson(res, 502, {
-      success: false,
-      domain,
-      error: error.message || 'Network error while contacting Ahrefs.'
-    });
   }
+
+  const [v3, v4] = await Promise.all([getVersion('dr3'), getVersion('dr4')]);
+  const bothFailed = !!v3.error && !!v4.error;
+  const statuses = [v3.status, v4.status].filter(Boolean);
+  const failureStatus = statuses.includes(429) ? 429 :
+    (statuses.includes(401) ? 401 : statuses.includes(403) ? 403 : 502);
+  return sendJson(res, bothFailed ? failureStatus : 200, {
+    success: !bothFailed,
+    domain,
+    dr3: v3.value,
+    dr4: v4.value,
+    errors: { dr3: v3.error, dr4: v4.error },
+    retryAfterMs: Math.max(v3.retryAfterMs || 0, v4.retryAfterMs || 0),
+    error: v3.error && v4.error ? `DR3: ${v3.error}; DR4: ${v4.error}` : null
+  });
 };

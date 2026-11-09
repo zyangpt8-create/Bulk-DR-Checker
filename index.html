@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bulk DR Checker</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link rel="stylesheet" href="style.css">
@@ -52,12 +53,11 @@
     </button>
     <div class="controls-spacer"></div>
     <div class="delay-select">
-      <label for="delayMs">Delay</label>
-      <select id="delayMs">
-        <option value="800">800ms</option>
-        <option value="1200" selected>1200ms</option>
-        <option value="2000">2000ms</option>
-        <option value="3000">3000ms</option>
+      <label for="speedMode">Speed</label>
+      <select id="speedMode" aria-label="Checking speed">
+        <option value="fast">Fast (5 parallel)</option>
+        <option value="balanced" selected>Balanced (3 parallel)</option>
+        <option value="safe">Safe (1 at a time)</option>
       </select>
     </div>
   </div>
@@ -73,6 +73,7 @@
   </div>
 
   <div class="stats-grid" id="statsGrid">
+    <div class="stat-card"><div class="stat-label">Avg DR4</div><div class="stat-value accent" id="statAvg4">&mdash;</div></div>
     <div class="stat-card">
       <div class="stat-label">Total</div>
       <div class="stat-value" id="statTotal">0</div>
@@ -86,15 +87,15 @@
       <div class="stat-value err" id="statFailed">0</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Avg DR</div>
+      <div class="stat-label">Avg DR3</div>
       <div class="stat-value" id="statAvg">&mdash;</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Highest</div>
+      <div class="stat-label">Highest DR3</div>
       <div class="stat-value accent" id="statMax">&mdash;</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">DR 50+</div>
+      <div class="stat-label">DR3 50+</div>
       <div class="stat-value warn" id="statHigh">0</div>
     </div>
   </div>
@@ -121,7 +122,9 @@
           <tr>
             <th>#</th>
             <th>Domain</th>
-            <th>DR</th>
+            <th>DR3</th>
+            <th>DR4</th>
+            <th>Difference</th>
             <th>Bar</th>
             <th>Status</th>
           </tr>

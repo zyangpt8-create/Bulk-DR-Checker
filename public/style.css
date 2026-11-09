@@ -403,3 +403,7 @@
       transition-duration: 0.01ms !important;
     }
   }
+
+/* Domain favicons in results */
+.domain-with-icon { display: inline-flex; align-items: center; gap: 10px; }
+.domain-favicon { width: 18px; height: 18px; flex: 0 0 18px; object-fit: contain; border-radius: 3px; }
